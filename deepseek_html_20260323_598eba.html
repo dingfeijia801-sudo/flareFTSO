@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flare FTSO 实时行情 - 加密货币价格监控</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.10.0/dist/ethers.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #0a0f1e 0%, #0c1222 100%);
+            min-height: 100vh;
+            color: #e5e7eb;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff 0%, #9ca3af 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 0.5rem;
+        }
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 2rem;
+            border-left: 3px solid #3b82f6;
+            padding-left: 1rem;
+        }
+        .status-bar {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #22c55e;
+            box-shadow: 0 0 8px #22c55e;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .status-dot.warning {
+            background-color: #eab308;
+        }
+        .status-dot.error {
+            background-color: #ef4444;
+        }
+        .contract-address {
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #9ca3af;
+            background: rgba(0,0,0,0.3);
+            padding: 0.25rem 0.75rem;
+            border-radius: 8px;
+        }
+        .price-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .price-card {
+            background: rgba(15, 25, 45, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            padding: 1.5rem;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .price-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+        .price-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .token-symbol {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .token-price {
+            font-size: 2rem;
+            font-weight: 800;
+            font-family: monospace;
+            margin: 0.5rem 0;
+        }
+        .price-usd {
+            font-size: 0.85rem;
+            color: #9ca3af;
+            margin-top: 0.25rem;
+        }
+        .update-time {
+            font-size: 0.7rem;
+            color: #6b7280;
+            margin-top: 1rem;
+            font-family: monospace;
+        }
+        .trend-up {
+            color: #22c55e;
+        }
+        .trend-down {
+            color: #ef4444;
+        }
+        .chart-container {
+            background: rgba(15, 25, 45, 0.5);
+            border-radius: 24px;
+            padding: 1.5rem;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            margin-top: 1rem;
+        }
+        .chart-title {
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+            color: #9ca3af;
+        }
+        canvas {
+            max-height: 400px;
+            width: 100%;
+        }
+        .refresh-btn {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            border: none;
+            color: white;
+            padding: 0.5rem 1.25rem;
+            border-radius: 40px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .refresh-btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        .refresh-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        footer {
+            text-align: center;
+            margin-top: 3rem;
+            color: #4b5563;
+            font-size: 0.75rem;
+        }
+        @media (max-width: 768px) {
+            body { padding: 1rem; }
+            .token-price { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Flare FTSO 实时行情</h1>
+        <div class="subtitle">基于 Flare 原生预言机 FTSOv2 · 每1.8秒更新 · 免费查询</div>
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">初始化中...</span>
+            </div>
+            <div class="contract-address" id="contractDisplay">合约: 未连接</div>
+            <button class="refresh-btn" id="refreshBtn">🔄 刷新数据</button>
+        </div>
+        <div class="price-grid" id="priceGrid">
+            <div style="text-align: center; grid-column: 1/-1; padding: 3rem;">加载价格数据中...</div>
+        </div>
+        <div class="chart-container">
+            <div class="chart-title">📈 价格趋势 (最近20次更新)</div>
+            <canvas id="priceChart"></canvas>
+        </div>
+        <footer>Flare FTSO 数据提供商网络 | 数据更新延迟约1.8秒 | 所有价格单位为美元</footer>
+    </div>
+
+    <script>
+        // ==================== 配置 ====================
+        // 用户提供的合约地址
+        const CONTRACT_ADDRESS = "0x11c2d4a24e1e246c99bf10385814a28e468690aa";
+        
+        // Flare 主网公共 RPC
+        const RPC_URL = "https://flare-api.flare.network/ext/C/rpc";
+        
+        // 合约 ABI (与合约中的 getAllPrices 匹配)
+        const CONTRACT_ABI = [
+            {
+                "inputs": [],
+                "name": "getAllPrices",
+                "outputs": [
+                    {"internalType": "uint256[]", "name": "prices", "type": "uint256[]"},
+                    {"internalType": "int8[]", "name": "decimals", "type": "int8[]"},
+                    {"internalType": "uint64", "name": "timestamp", "type": "uint64"}
+                ],
+                "stateMutability": "payable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "getFeedIds",
+                "outputs": [{"internalType": "bytes21[]", "name": "", "type": "bytes21[]"}],
+                "stateMutability": "pure",
+                "type": "function"
+            }
+        ];
+        
+        // 代币名称映射（与合约中 feedIds 顺序一致）
+        const TOKEN_NAMES = ["FLR", "BTC", "ETH", "SOL"];
+        const TOKEN_ICONS = ["🔥", "₿", "Ξ", "◎"];
+        
+        // 全局变量
+        let provider;
+        let contract;
+        let priceChart;
+        let priceHistory = { FLR: [], BTC: [], ETH: [], SOL: [] };
+        const MAX_HISTORY = 20;
+        
+        // ==================== 初始化 ====================
+        async function init() {
+            try {
+                updateStatus("connecting", "连接Flare网络...");
+                provider = new ethers.JsonRpcProvider(RPC_URL);
+                await provider.getNetwork();
+                contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+                updateStatus("connected", "已连接 Flare 主网");
+                document.getElementById("contractDisplay").innerText = `合约: ${CONTRACT_ADDRESS.slice(0, 10)}...${CONTRACT_ADDRESS.slice(-6)}`;
+                initChart();
+                await fetchAndDisplayPrices();
+                setInterval(fetchAndDisplayPrices, 10000);
+            } catch (error) {
+                console.error("初始化失败:", error);
+                updateStatus("error", `连接失败: ${error.message.slice(0, 50)}`);
+                document.getElementById("priceGrid").innerHTML = `
+                    <div style="text-align: center; grid-column: 1/-1; padding: 2rem; color: #ef4444;">
+                        ⚠️ 连接失败，请检查合约地址是否正确<br>
+                        当前合约地址: ${CONTRACT_ADDRESS}<br>
+                        错误: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        function updateStatus(status, message) {
+            const dot = document.getElementById("statusDot");
+            const text = document.getElementById("statusText");
+            text.innerText = message;
+            dot.className = "status-dot";
+            if (status === "connecting") dot.classList.add("warning");
+            else if (status === "error") dot.classList.add("error");
+        }
+        
+        function initChart() {
+            const ctx = document.getElementById("priceChart").getContext("2d");
+            priceChart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: "FLR/USD", data: [], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.1)", tension: 0.3, fill: true },
+                        { label: "BTC/USD", data: [], borderColor: "#f59e0b", backgroundColor: "rgba(245,158,11,0.05)", tension: 0.3, fill: true },
+                        { label: "ETH/USD", data: [], borderColor: "#8b5cf6", backgroundColor: "rgba(139,92,246,0.05)", tension: 0.3, fill: true },
+                        { label: "SOL/USD", data: [], borderColor: "#14b8a6", backgroundColor: "rgba(20,184,166,0.05)", tension: 0.3, fill: true }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { position: "top", labels: { color: "#9ca3af" } },
+                        tooltip: { mode: "index", intersect: false }
+                    },
+                    scales: {
+                        y: { grid: { color: "rgba(75,85,99,0.3)" }, ticks: { color: "#9ca3af" } },
+                        x: { grid: { display: false }, ticks: { color: "#6b7280", maxRotation: 45, autoSkip: true } }
+                    }
+                }
+            });
+        }
+        
+        function updateChart(prices, timestamp) {
+            const timeLabel = new Date(Number(timestamp) * 1000).toLocaleTimeString();
+            const currentLabels = priceChart.data.labels;
+            currentLabels.push(timeLabel);
+            if (currentLabels.length > MAX_HISTORY) currentLabels.shift();
+            priceChart.data.labels = currentLabels;
+            for (let i = 0; i < TOKEN_NAMES.length; i++) {
+                const token = TOKEN_NAMES[i];
+                priceHistory[token].push(prices[token]);
+                if (priceHistory[token].length > MAX_HISTORY) priceHistory[token].shift();
+                priceChart.data.datasets[i].data = [...priceHistory[token]];
+            }
+            priceChart.update();
+        }
+        
+        // 修正：formatPrice 函数只负责格式化显示，不做额外计算
+        function formatPrice(actualPrice, token) {
+            if (token === "BTC" || token === "ETH") {
+                return `$${actualPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
+            if (token === "SOL") {
+                return `$${actualPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
+            // FLR 通常价格较低，显示更多小数位
+            return `$${actualPrice.toFixed(6)}`;
+        }
+        
+        // 核心：使用 staticCall 避免 payable 方法被误认为需要发送交易
+        async function fetchAndDisplayPrices() {
+            const refreshBtn = document.getElementById("refreshBtn");
+            refreshBtn.disabled = true;
+            try {
+                // 调用合约的 getAllPrices 方法
+                const [pricesRaw, decimalsRaw, timestamp] = await contract.getAllPrices.staticCall();
+                
+                const prices = {};
+                const decimals = {};
+                
+                // 关键修正：按公式 actualPrice = rawPrice / 10^|decimals| 计算实际价格
+                for (let i = 0; i < TOKEN_NAMES.length; i++) {
+                    const token = TOKEN_NAMES[i];
+                    const rawPrice = Number(pricesRaw[i]);      // 原始价格（整数）
+                    const dec = Number(decimalsRaw[i]);         // 小数位数（负数）
+                    const divisor = Math.pow(10, Math.abs(dec)); // 除数 = 10^|decimals|
+                    const actualPrice = rawPrice / divisor;      // 实际美元价格
+                    
+                    prices[token] = actualPrice;
+                    decimals[token] = dec;
+                    
+                    console.log(`${token}: raw=${rawPrice}, dec=${dec}, divisor=${divisor}, actual=${actualPrice}`);
+                }
+                
+                const updateTime = new Date(Number(timestamp) * 1000);
+                renderPriceCards(prices, decimals, updateTime);
+                updateChart(prices, timestamp);
+                updateStatus("connected", `数据已更新 · ${updateTime.toLocaleTimeString()}`);
+                
+            } catch (error) {
+                console.error("获取价格失败:", error);
+                updateStatus("error", `获取数据失败: ${error.message}`);
+            } finally {
+                refreshBtn.disabled = false;
+            }
+        }
+        
+        function renderPriceCards(prices, decimals, updateTime) {
+            const grid = document.getElementById("priceGrid");
+            
+            // 计算趋势（与上一次比较）
+            const trends = {};
+            for (const token of TOKEN_NAMES) {
+                const history = priceHistory[token];
+                if (history.length >= 2) {
+                    const prev = history[history.length - 2];
+                    const curr = prices[token];
+                    trends[token] = curr > prev ? "up" : curr < prev ? "down" : "same";
+                } else {
+                    trends[token] = "same";
+                }
+            }
+            
+            grid.innerHTML = TOKEN_NAMES.map((token, idx) => {
+                const actualPrice = prices[token];
+                const dec = decimals[token];
+                const formattedPrice = formatPrice(actualPrice, token);
+                const trendIcon = trends[token] === "up" ? "▲" : trends[token] === "down" ? "▼" : "●";
+                const trendClass = trends[token] === "up" ? "trend-up" : trends[token] === "down" ? "trend-down" : "";
+                
+                return `
+                    <div class="price-card">
+                        <div class="price-header">
+                            <span class="token-symbol">${TOKEN_ICONS[idx]} ${token}/USD</span>
+                            <span class="${trendClass}">${trendIcon}</span>
+                        </div>
+                        <div class="token-price">${formattedPrice}</div>
+                        <div class="price-usd">实时价格 · ${Math.abs(dec)}位精度</div>
+                        <div class="update-time">⏱️ ${updateTime.toLocaleTimeString()}</div>
+                    </div>
+                `;
+            }).join("");
+        }
+        
+        // 启动页面
+        window.addEventListener("DOMContentLoaded", () => {
+            if (CONTRACT_ADDRESS === "0x11c2d4a24e1e246c99bf10385814a28e468690aa") {
+                // 地址已配置，正常启动
+                init();
+                document.getElementById("refreshBtn").addEventListener("click", fetchAndDisplayPrices);
+            } else {
+                document.getElementById("priceGrid").innerHTML = `
+                    <div style="text-align: center; grid-column: 1/-1; padding: 2rem; background: rgba(239,68,68,0.1); border-radius: 16px;">
+                        ⚠️ 合约地址配置错误，请联系开发者
+                    </div>
+                `;
+                updateStatus("error", "合约地址配置错误");
+            }
+        });
+    </script>
+</body>
+</html>
